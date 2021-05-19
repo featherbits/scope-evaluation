@@ -1,0 +1,26 @@
+td[mat-cell] {
+    padding-right: 16px;
+    &:last-child {
+        padding-right: 0;
+    }
+}
+
+.mat-column-vehicleCount,
+.mat-column-loader,
+.mat-column-loadingFailure {
+    text-align: center;
+}
+
+.mat-column-loadingFailure {
+    button {
+        margin-left: 8px;
+    }
+}
+
+.mat-column-loader {
+    text-align: center;
+}
+
+tr[hidden] {
+    display: none;
+}
