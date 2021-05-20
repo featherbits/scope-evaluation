@@ -10,7 +10,7 @@ import { UserService } from 'src/app/services/user.service';
 })
 export class UserListComponent implements OnInit, OnDestroy {
 
-  columns = ['owner', 'vehicleCount']
+  columns = ['owner', 'vehicleCount', 'actions']
   footerColumns = ['loader']
   users: User[] = []
   loading = true
