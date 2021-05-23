@@ -16,7 +16,7 @@ import { ProblemNotificationService } from 'src/app/services/problem-notificatio
 import Select, { SelectEvent } from 'ol/interaction/Select';
 import Overlay from 'ol/Overlay';
 import { User, Vehicle } from 'src/app/models/user';
-import { MatSelectionList, MatSelectionListChange } from '@angular/material/list';
+import { MatListOption, MatSelectionList, MatSelectionListChange } from '@angular/material/list';
 import { VehicleLocation } from 'src/app/models/vehicle-geo';
 
 @Component({
@@ -49,13 +49,14 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
   private markerVectorSource!: VectorSource
   private featureSelect!: Select
   private popupOverlay!: Overlay
+  private markerLayer!: VectorLayer
 
   constructor(private userSvc: UserService, private route: ActivatedRoute, private pNotSvc: ProblemNotificationService) { }
 
   ngOnInit(): void {
     this.markerVectorSource = new VectorSource()
 
-    const markerLayer = new VectorLayer({
+    this.markerLayer = new VectorLayer({
       source: this.markerVectorSource,
     })
 
@@ -73,7 +74,7 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
         new TileLayer({
           source: new OSM()
         }),
-        markerLayer
+        this.markerLayer
       ],
       view: new View({
         center: fromLonLat([2.896372, 44.6024]),
@@ -83,18 +84,22 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
     })
 
     this.featureSelect = new Select({
-      layers: [markerLayer]
+      layers: [this.markerLayer]
     })
 
     this.featureSelect.on('select', event => {
       if (this.vehicle) {
         this.popupOverlay.setPosition(undefined)
         this.vehicle = undefined
-        this.vehicleList.options.forEach(o => {
-          o.selected = false
-        })
+        this.vehicleList.selectedOptions.clear()
       }
       this.selectVeicleMarker(event.selected[0])
+      if (this.vehicle) {
+        const option = this.vehicleList.options.find(o => o.value === this.vehicle)
+        if (option) {
+          this.vehicleList.selectedOptions.select(option)
+        }
+      }
     })
 
     this.map.addInteraction(this.featureSelect)
@@ -135,9 +140,16 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
         }))
         this.markerVectorSource.addFeature(feature)
       })
-      const view = this.map.getView()
-      view.setCenter(fromLonLat([data.locations[0].lon, data.locations[0].lat]))
-      view.setZoom(8)
+
+      const extent = this.markerVectorSource.getExtent()
+      if (extent) {
+        const view = this.map.getView()
+        view.fit(extent)
+        const zoom = this.map.getView().getZoom()
+        if (zoom) {
+          view.setZoom(zoom - 0.5)
+        }
+      }
       this.loading = false
     }, error => {
       this.loading = false

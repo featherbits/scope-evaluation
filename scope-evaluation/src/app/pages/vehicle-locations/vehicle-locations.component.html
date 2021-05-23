@@ -1,10 +1,12 @@
 <mat-progress-bar mode="indeterminate" *ngIf="loading"></mat-progress-bar>
 <mat-drawer-container autosize>
     <mat-drawer mode="side" opened>
+        <a mat-button routerLink="/"><mat-icon>arrow_back</mat-icon> To user list</a>
         <mat-selection-list #vehicleList [multiple]="false" (selectionChange)="onVehicleSelectedFromList($event)">
             <ng-container *ngIf="user">
                 <mat-list-option *ngFor="let vehicle of user.vehicles" [value]="vehicle">
-                    {{ vehicle.make }} {{ vehicle.model }}
+                    <div mat-line>{{ vehicle.make }} {{ vehicle.model }}</div>
+                    <div mat-line>{{ vehicle.vin }}</div>
                 </mat-list-option>
             </ng-container>
         </mat-selection-list>
