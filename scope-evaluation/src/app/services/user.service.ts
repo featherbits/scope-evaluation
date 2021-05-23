@@ -33,8 +33,7 @@ export class UserService {
   listVehicleLocations(userId: number): Observable<VehicleLocation[]> {
     return this.cache.getOrSet(`user.${userId}.VehicleLocations`, () => this.http.get<VehicleLocationPayload>(apiUrl('?op=getlocations&userid=' + userId), {
       headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Cache-Control': 'no-cache'
       }
     }).pipe(map(p => p.data)), { ttlMilliseconds: 30 * 1000 })
   }
@@ -46,8 +45,7 @@ export class UserService {
   private listUsersFromApi(): Observable<User[]> {
     return this.http.get<ListPayload>(apiUrl('?op=list'), {
       headers: {
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        'Cache-Control': 'no-cache'
       }
     }).pipe(map(payload => filterUsers(payload.data)))
   }
