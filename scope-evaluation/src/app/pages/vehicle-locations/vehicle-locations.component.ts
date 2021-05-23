@@ -50,6 +50,9 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
   private featureSelect!: Select
   private popupOverlay!: Overlay
   private markerLayer!: VectorLayer
+  private locationUpdateTimeout?: number
+
+  private vehicleLocations?: VehicleLocation[]
 
   constructor(private userSvc: UserService, private route: ActivatedRoute, private pNotSvc: ProblemNotificationService) { }
 
@@ -93,13 +96,8 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
         this.vehicle = undefined
         this.vehicleList.selectedOptions.clear()
       }
-      this.selectVeicleMarker(event.selected[0])
-      if (this.vehicle) {
-        const option = this.vehicleList.options.find(o => o.value === this.vehicle)
-        if (option) {
-          this.vehicleList.selectedOptions.select(option)
-        }
-      }
+      this.selectVehicleMarker(event.selected[0])
+      this.markVehicleSelectOptionSelected(this.vehicle)
     })
 
     this.map.addInteraction(this.featureSelect)
@@ -111,45 +109,24 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.dataSubscription?.unsubscribe()
+    this.clearLocationUpdateTimeout()
     this.routeSubscription?.unsubscribe()
   }
 
   private load(userId: number): void {
     this.loading = true
+
     this.dataSubscription?.unsubscribe()
+    this.clearLocationUpdateTimeout()
+
     this.dataSubscription = forkJoin({
       user: this.userSvc.getUser(userId),
       locations: this.userSvc.listVehicleLocations(userId)
     }).subscribe(data => {
       this.user = data.user
-      this.markerVectorSource.clear()
-      data.locations.forEach(location => {
-        const vehicle = data.user?.vehicles.find(v => v.vehicleid === location.vehicleid)
-        const feature = new Feature({
-          vehicle: vehicle,
-          geometry: new Point(fromLonLat([location.lon, location.lat]))
-        })
-        feature.setId(vehicle?.vehicleid)
-        feature.setStyle(new Style({
-          image: new Circle({
-            radius: 10,
-            fill: new Fill({
-              color: vehicle?.color
-            })
-          })
-        }))
-        this.markerVectorSource.addFeature(feature)
-      })
-
-      const extent = this.markerVectorSource.getExtent()
-      if (extent) {
-        const view = this.map.getView()
-        view.fit(extent)
-        const zoom = this.map.getView().getZoom()
-        if (zoom) {
-          view.setZoom(zoom - 0.5)
-        }
-      }
+      this.vehicleLocations = data.locations
+      this.displayVehicleLocations(data.locations)
+      this.scheduleLocationUpdate()
       this.loading = false
     }, error => {
       this.loading = false
@@ -163,7 +140,78 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
     })
   }
 
-  private selectVeicleMarker(marker: Feature | undefined): void {
+  private scheduleLocationUpdate(): void {
+    this.locationUpdateTimeout = <any>setTimeout(() => {
+      if (this.user) {
+        this.userSvc.listVehicleLocations(this.user.userid).subscribe(locations => {
+          locations.forEach(location => {
+            if (location.lat !== null && location.lon !== null) {
+              const marker = <Feature>this.markerVectorSource.getFeatureById(location.vehicleid);
+              (<Point>marker.getGeometry()).setCoordinates(fromLonLat([location.lon, location.lat]))
+            }
+          })
+          this.fitZoom()
+          this.scheduleLocationUpdate()
+        }, error => {
+          console.error(error)
+          this.scheduleLocationUpdate()
+        })
+      }
+    }, 60 * 1000)
+  }
+
+  private displayVehicleLocations(locations: VehicleLocation[]): void {
+    this.markerVectorSource.clear()
+    
+    locations.forEach(location => {
+      if (location.lon === null || location.lat === null) {
+        return
+      }
+
+      const vehicle = this.user?.vehicles.find(v => v.vehicleid === location.vehicleid)
+
+      if (!vehicle) {
+        return
+      }
+
+      const feature = new Feature({
+        vehicle: vehicle,
+        geometry: new Point(fromLonLat([location.lon, location.lat]))
+      })
+
+      feature.setId(vehicle?.vehicleid)
+      feature.setStyle(new Style({
+        image: new Circle({
+          radius: 10,
+          fill: new Fill({
+            color: vehicle?.color
+          }),
+          stroke: new Stroke({
+            color: 'rgba(0,0,0,0.5)',
+            width: 4
+          })
+        })
+      }))
+
+      this.markerVectorSource.addFeature(feature)
+    })
+
+    this.fitZoom()
+  }
+
+  private fitZoom(): void {
+    const extent = this.markerVectorSource.getExtent()
+    if (extent) {
+      const view = this.map.getView()
+      view.fit(extent)
+      const zoom = this.map.getView().getZoom()
+      if (zoom) {
+        view.setZoom(zoom - 0.5)
+      }
+    }
+  }
+
+  private selectVehicleMarker(marker: Feature | undefined): void {
     const vehicle: Vehicle | undefined = marker?.get('vehicle')
     if (marker && vehicle) {
       this.vehicle = vehicle
@@ -172,14 +220,30 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
     }
   }
 
+  private markVehicleSelectOptionSelected(veicle: Vehicle | undefined): void {
+    if (veicle) {
+      const option = this.vehicleList.options.find(o => o.value === this.vehicle)
+      if (option) {
+        this.vehicleList.selectedOptions.select(option)
+      }
+    }
+  }
+
+  private clearLocationUpdateTimeout(): void {
+    if (this.locationUpdateTimeout !== undefined) {
+      clearTimeout(this.locationUpdateTimeout)
+      this.locationUpdateTimeout = undefined
+    }
+  }
+
   onVehicleSelectedFromList(event: MatSelectionListChange): void {
     const vehicle: Vehicle | undefined = event.options[0]?.value
 
     if (vehicle) {
-      const marker = <Feature>this.markerVectorSource.getFeatureById(vehicle.vehicleid)
       this.featureSelect.getFeatures().clear()
+      const marker = <Feature>this.markerVectorSource.getFeatureById(vehicle.vehicleid)
       this.featureSelect.getFeatures().push(marker)
-      this.selectVeicleMarker(marker)
+      this.selectVehicleMarker(marker)
     }
   }
 

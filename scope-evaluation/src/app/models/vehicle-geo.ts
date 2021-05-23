@@ -1,5 +1,5 @@
 export interface VehicleLocation {
     vehicleid: number
-    lat: number
-    lon: number
+    lat: number | null
+    lon: number | null
 }
