@@ -216,7 +216,7 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
       view.fit(extent)
       const zoom = this.map.getView().getZoom()
       if (zoom) {
-        view.setZoom(zoom - 0.5)
+        view.setZoom(Math.min(zoom - 0.5, 16))
       }
     }
   }
