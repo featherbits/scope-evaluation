@@ -9,15 +9,16 @@ import { ActivatedRoute } from '@angular/router';
 import { forkJoin, Subscription } from 'rxjs';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import Feature, { FeatureLike } from 'ol/Feature';
+import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
-import { Circle, Fill, Icon, Stroke, Style } from 'ol/style';
+import { Circle, Fill, Stroke, Style } from 'ol/style';
 import { ProblemNotificationService } from 'src/app/services/problem-notification.service';
-import Select, { SelectEvent } from 'ol/interaction/Select';
+import Select from 'ol/interaction/Select';
 import Overlay from 'ol/Overlay';
 import { User, Vehicle } from 'src/app/models/user';
-import { MatListOption, MatSelectionList, MatSelectionListChange } from '@angular/material/list';
+import { MatSelectionList, MatSelectionListChange } from '@angular/material/list';
 import { VehicleLocation } from 'src/app/models/vehicle-geo';
+import { GeocodingService } from 'src/app/services/geocoding.service';
 
 @Component({
   selector: 'app-vehicle-locations',
@@ -32,6 +33,8 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
 
   user?: User
 
+  address?: string
+
   @ViewChild('mapContainer', { static: true })
   private readonly mapContainer!: ElementRef<HTMLElement>
 
@@ -43,8 +46,9 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
 
   private map!: Map;
 
-  private dataSubscription?: Subscription;
-  private routeSubscription?: Subscription;
+  private dataSubscription?: Subscription
+  private routeSubscription?: Subscription
+  private addressLookupSubscription?: Subscription
 
   private markerVectorSource!: VectorSource
   private featureSelect!: Select
@@ -52,9 +56,14 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
   private markerLayer!: VectorLayer
   private locationUpdateTimeout?: number
 
-  private vehicleLocations?: VehicleLocation[]
+  private locations?: VehicleLocation[]
 
-  constructor(private userSvc: UserService, private route: ActivatedRoute, private pNotSvc: ProblemNotificationService) { }
+  constructor(
+    private userSvc: UserService,
+    private route: ActivatedRoute,
+    private pNotSvc: ProblemNotificationService,
+    private geocoding: GeocodingService
+  ) { }
 
   ngOnInit(): void {
     this.markerVectorSource = new VectorSource()
@@ -111,6 +120,7 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
     this.dataSubscription?.unsubscribe()
     this.clearLocationUpdateTimeout()
     this.routeSubscription?.unsubscribe()
+    this.addressLookupSubscription?.unsubscribe()
   }
 
   private load(userId: number): void {
@@ -124,7 +134,7 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
       locations: this.userSvc.listVehicleLocations(userId)
     }).subscribe(data => {
       this.user = data.user
-      this.vehicleLocations = data.locations
+      this.locations = data.locations
       this.displayVehicleLocations(data.locations)
       this.scheduleLocationUpdate()
       this.loading = false
@@ -214,9 +224,17 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
   private selectVehicleMarker(marker: Feature | undefined): void {
     const vehicle: Vehicle | undefined = marker?.get('vehicle')
     if (marker && vehicle) {
+      this.addressLookupSubscription?.unsubscribe()
       this.vehicle = vehicle
+      this.address = undefined
       const coordinates = (<Point>marker.getGeometry())?.getCoordinates()
       this.popupOverlay.setPosition(coordinates)
+      const location = this.locations?.find(l => l.vehicleid == vehicle.vehicleid)
+      if (location && location.lat && location.lon) {
+        this.addressLookupSubscription = this.geocoding.reverse(location.lat, location.lon).subscribe(place => {
+          this.address = place.display_name
+        })
+      }
     }
   }
 
