@@ -9,7 +9,7 @@ const routes: Routes = [
     component: UserListComponent
   },
   {
-    path: 'user/:id/vehicles-on-map',
+    path: 'user/:userId/vehicles-on-map',
     component: VehicleLocationsComponent
   },
 ];

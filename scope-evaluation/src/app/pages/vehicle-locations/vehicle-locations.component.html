@@ -1,1 +1,15 @@
+<mat-progress-bar mode="indeterminate" *ngIf="loading"></mat-progress-bar>
 <div #mapContainer class="map-container"></div>
+<div #popup class="popup">
+    <ng-container *ngIf="vehicle">
+        <div class="data-container">
+            <div class="image-container">
+                <img [src]="vehicle.foto">
+            </div>
+            <div>
+                <p>{{ vehicle.make }} {{ vehicle.model }}</p>
+                <p></p>
+            </div>
+        </div>
+    </ng-container>
+</div>
