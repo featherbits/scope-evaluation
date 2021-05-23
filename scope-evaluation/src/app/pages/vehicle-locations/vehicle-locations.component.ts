@@ -13,9 +13,11 @@ import Feature, { FeatureLike } from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import { Circle, Fill, Icon, Stroke, Style } from 'ol/style';
 import { ProblemNotificationService } from 'src/app/services/problem-notification.service';
-import Select from 'ol/interaction/Select';
+import Select, { SelectEvent } from 'ol/interaction/Select';
 import Overlay from 'ol/Overlay';
-import { Vehicle } from 'src/app/models/user';
+import { User, Vehicle } from 'src/app/models/user';
+import { MatSelectionList, MatSelectionListChange } from '@angular/material/list';
+import { VehicleLocation } from 'src/app/models/vehicle-geo';
 
 @Component({
   selector: 'app-vehicle-locations',
@@ -28,11 +30,16 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
 
   vehicle?: Vehicle
 
+  user?: User
+
   @ViewChild('mapContainer', { static: true })
   private readonly mapContainer!: ElementRef<HTMLElement>
 
   @ViewChild('popup', { static: true })
   private readonly popup!: ElementRef<HTMLElement>
+
+  @ViewChild('vehicleList', { static: true })
+  private readonly vehicleList!: MatSelectionList
 
   private map!: Map;
 
@@ -40,6 +47,8 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
   private routeSubscription?: Subscription;
 
   private markerVectorSource!: VectorSource
+  private featureSelect!: Select
+  private popupOverlay!: Overlay
 
   constructor(private userSvc: UserService, private route: ActivatedRoute, private pNotSvc: ProblemNotificationService) { }
 
@@ -50,7 +59,7 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
       source: this.markerVectorSource,
     })
 
-    const overlay = new Overlay({
+    this.popupOverlay = new Overlay({
       element: this.popup.nativeElement,
       autoPan: true,
       autoPanAnimation: {
@@ -70,27 +79,25 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
         center: fromLonLat([2.896372, 44.6024]),
         zoom: 3,
       }),
-      overlays: [overlay]
+      overlays: [this.popupOverlay]
     })
 
-    const select = new Select({
+    this.featureSelect = new Select({
       layers: [markerLayer]
     })
 
-    select.on('select', event => {
-      const feature: Feature | undefined = event.selected[0]
-      const vehicle: Vehicle | undefined = feature?.get('vehicle')
-      if (feature && vehicle) {
-        this.vehicle = vehicle
-        const coordinates = (<Point>feature.getGeometry())?.getCoordinates()
-        overlay.setPosition(coordinates)
-      } else if (this.vehicle) {
-        overlay.setPosition(undefined)
+    this.featureSelect.on('select', event => {
+      if (this.vehicle) {
+        this.popupOverlay.setPosition(undefined)
         this.vehicle = undefined
+        this.vehicleList.options.forEach(o => {
+          o.selected = false
+        })
       }
+      this.selectVeicleMarker(event.selected[0])
     })
 
-    this.map.addInteraction(select)
+    this.map.addInteraction(this.featureSelect)
 
     this.routeSubscription = this.route.params.subscribe(params => {
       this.load(params.userId)
@@ -105,41 +112,63 @@ export class VehicleLocationsComponent implements OnInit, OnDestroy {
   private load(userId: number): void {
     this.loading = true
     this.dataSubscription?.unsubscribe()
-      this.dataSubscription = forkJoin({
-        user: this.userSvc.getUser(userId),
-        locations: this.userSvc.listVehicleLocations(userId)
-      }).subscribe(data => {
-        this.markerVectorSource.clear()
-        data.locations.forEach(location => {
-          const vehicle = data.user?.vehicles.find(v => v.vehicleid === location.vehicleid)
-          const feature = new Feature({
-            vehicle: vehicle,
-            geometry: new Point(fromLonLat([location.lon, location.lat]))
-          })
-          feature.setStyle(new Style({
-            image: new Circle({
-              radius: 10,
-              fill: new Fill({
-                color: vehicle?.color
-              })
+    this.dataSubscription = forkJoin({
+      user: this.userSvc.getUser(userId),
+      locations: this.userSvc.listVehicleLocations(userId)
+    }).subscribe(data => {
+      this.user = data.user
+      this.markerVectorSource.clear()
+      data.locations.forEach(location => {
+        const vehicle = data.user?.vehicles.find(v => v.vehicleid === location.vehicleid)
+        const feature = new Feature({
+          vehicle: vehicle,
+          geometry: new Point(fromLonLat([location.lon, location.lat]))
+        })
+        feature.setId(vehicle?.vehicleid)
+        feature.setStyle(new Style({
+          image: new Circle({
+            radius: 10,
+            fill: new Fill({
+              color: vehicle?.color
             })
-          }))
-          this.markerVectorSource.addFeature(feature)
-        })
-        const view = this.map.getView()
-        view.setCenter(fromLonLat([data.locations[0].lon, data.locations[0].lat]))
-        view.setZoom(8)
-        this.loading = false
-      }, error => {
-        this.loading = false
-        console.error(error)
-        this.pNotSvc.show('Can\'t load data right now!', {
-          actionName: 'Retry',
-          onAction: () => {
-            this.load(userId)
-          }
-        })
+          })
+        }))
+        this.markerVectorSource.addFeature(feature)
       })
+      const view = this.map.getView()
+      view.setCenter(fromLonLat([data.locations[0].lon, data.locations[0].lat]))
+      view.setZoom(8)
+      this.loading = false
+    }, error => {
+      this.loading = false
+      console.error(error)
+      this.pNotSvc.show('Can\'t load data right now!', {
+        actionName: 'Retry',
+        onAction: () => {
+          this.load(userId)
+        }
+      })
+    })
+  }
+
+  private selectVeicleMarker(marker: Feature | undefined): void {
+    const vehicle: Vehicle | undefined = marker?.get('vehicle')
+    if (marker && vehicle) {
+      this.vehicle = vehicle
+      const coordinates = (<Point>marker.getGeometry())?.getCoordinates()
+      this.popupOverlay.setPosition(coordinates)
+    }
+  }
+
+  onVehicleSelectedFromList(event: MatSelectionListChange): void {
+    const vehicle: Vehicle | undefined = event.options[0]?.value
+
+    if (vehicle) {
+      const marker = <Feature>this.markerVectorSource.getFeatureById(vehicle.vehicleid)
+      this.featureSelect.getFeatures().clear()
+      this.featureSelect.getFeatures().push(marker)
+      this.selectVeicleMarker(marker)
+    }
   }
 
 }

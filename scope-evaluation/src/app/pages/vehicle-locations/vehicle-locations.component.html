@@ -1,15 +1,28 @@
 <mat-progress-bar mode="indeterminate" *ngIf="loading"></mat-progress-bar>
-<div #mapContainer class="map-container"></div>
-<div #popup class="popup">
-    <ng-container *ngIf="vehicle">
-        <div class="data-container">
-            <div class="image-container">
-                <img [src]="vehicle.foto">
-            </div>
-            <div>
-                <p>{{ vehicle.make }} {{ vehicle.model }}</p>
-                <p></p>
-            </div>
+<mat-drawer-container autosize>
+    <mat-drawer mode="side" opened>
+        <mat-selection-list #vehicleList [multiple]="false" (selectionChange)="onVehicleSelectedFromList($event)">
+            <ng-container *ngIf="user">
+                <mat-list-option *ngFor="let vehicle of user.vehicles" [value]="vehicle">
+                    {{ vehicle.make }} {{ vehicle.model }}
+                </mat-list-option>
+            </ng-container>
+        </mat-selection-list>
+    </mat-drawer>
+    <mat-drawer-content>
+        <div #mapContainer class="map-container"></div>
+        <div #popup class="popup">
+            <ng-container *ngIf="vehicle">
+                <div class="data-container">
+                    <div class="image-container">
+                        <img [src]="vehicle.foto">
+                    </div>
+                    <div>
+                        <p>{{ vehicle.make }} {{ vehicle.model }}</p>
+                        <p></p>
+                    </div>
+                </div>
+            </ng-container>
         </div>
-    </ng-container>
-</div>
+    </mat-drawer-content>
+</mat-drawer-container>
